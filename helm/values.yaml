@@ -1,0 +1,42 @@
+# Default values for helm.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: kevashcraft/andrec-kevapps
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    certmanager.k8s.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: andrec.kevapps.com
+      paths: ['']
+    - host: www.andrec.kevapps.com
+      paths: ['']
+  tls:
+    - secretName: andrec-kevapps-tls
+      hosts:
+        - andrec.kevapps.com
+        - www.andrec.kevapps.com
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
