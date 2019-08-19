@@ -3,7 +3,7 @@
     <canvas
       ref="canvas"
       :width="canvasWidth"
-      :height="canvasHeight"
+      :height="sheight"
       ></canvas>
   </div>
 </template>
@@ -23,9 +23,11 @@
 <script>
 export default {
   name: 'Spectrogram',
+  props: {
+    sheight: Number
+  },
   data () {
     return {
-      canvasHeight: 256,
       canvasWidth: 600,
     }
   },
@@ -36,11 +38,11 @@ export default {
   },
   methods: {
     draw (data) {
-      let imageData = this.ctx.getImageData(1, 0, this.canvas.width - 1, this.canvasHeight)
-      // this.ctx.clearRect(0, 0, this.canvas.width, this.canvasHeight)
+      let imageData = this.ctx.getImageData(1, 0, this.canvas.width - 1, this.sheight)
+      // this.ctx.clearRect(0, 0, this.canvas.width, this.sheight)
       this.ctx.putImageData(imageData, 0, 0)
-      // let startIdx = this.data.length - (30 * this.canvasHeight)
-      // console.log('startIdx', startIdx, this.data.length, this.canvasWidth, this.canvasHeight);
+      // let startIdx = this.data.length - (30 * this.sheight)
+      // console.log('startIdx', startIdx, this.data.length, this.canvasWidth, this.sheight);
       let x = this.canvas.width - 1
       // console.log('x', x);
       let y = 0
@@ -55,7 +57,7 @@ export default {
         this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
         this.ctx.fillRect(x, y, 1, 1)
         y++
-        if (y >= 256) {
+        if (y >= this.sheight) {
           x++
           y = 0
         }

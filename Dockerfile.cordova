@@ -34,5 +34,6 @@ RUN mv /app/dist /cordova/andrec-kevapps/www
 WORKDIR /cordova/andrec-kevapps
 RUN cordova telemetry off
 RUN cordova platform add android@8.0.0
+RUN cordova plugin add cordova-plugin-audioinput
 
 COPY res res

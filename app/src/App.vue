@@ -12,7 +12,7 @@
       <md-dialog :md-active.sync="saveDialog">
         <md-dialog-title>Save as File</md-dialog-title>
         <md-content style="margin: 15px">
-          <form @submit.prevent="saveFile($event)">
+          <form @submit.prevent="saveFile">
             <md-field>
               <label>Filename</label>
               <md-input v-model="filename" ref="filename"></md-input>
@@ -26,6 +26,12 @@
 </template>
 
 <script>
+class WaveProcessorNode extends AudioWorkletNode {
+  constructor(context) {
+    super(context, 'wave-processor');
+  }
+}
+
 import Spectrogram from './components/Spectrogram.vue'
 import moment from 'moment'
 
@@ -42,17 +48,14 @@ export default {
       saveDialog: false,
       audioCtx: false,
       filename: '',
-      filenameStr: moment().format('dd (MM/DD) HH:mm'),
       fftn: 512,
       sheight: 256,
       fftSize: 600 * 256
     }
   },
-  mounted () {
-    this.filename = this.filenameStr
-  },
   watch: {
     saveDialog (b) {
+      this.filename = moment().format('dd (MM/DD) HH:mm')
       setTimeout(() => {
         if (b) {
           let input =  this.$refs['filename'].$el
@@ -62,56 +65,79 @@ export default {
       }, 150)
     }
   },
+  async mounted () {
+    this.audioCtx = new AudioContext({sampleRate: 44100})
+    await this.audioCtx.audioWorklet.addModule('wave-processor.js')
+    this.waveNode = new WaveProcessorNode(this.audioCtx);
+    this.waveNode.port.onmessage = evt => {
+      let waveData = evt.data.waveData || []
+      var blob = new Blob([waveData], {type: 'audio/wav'});
+      var objectUrl = URL.createObjectURL(blob);
+
+      var link = document.createElement('a');
+      link.setAttribute('href', objectUrl);
+      link.setAttribute('download', this.filename + '.wav');
+      document.body.appendChild(link);
+      link.click();
+    }
+  },
   methods: {
-    startRecording () {
-      if (!this.audioCtx) {
-        this.audioCtx = new AudioContext()
+    async startRecording () {
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume()
       }
       this.state = 'recording'
 
-      navigator
-      .mediaDevices
-      .getUserMedia({ audio: true, video: false })
-      .then(this.beginAudio)
+      if (!!window.cordova) {
+        console.log('cordova!!');
+        // First check whether we already have permission to access the microphone.
+        window.audioinput.checkMicrophonePermission(function(hasPermission) {
+          if (hasPermission) {
+            this.beginAudio(false)
+          } else {
+            // Ask the user for permission to access the microphone
+            window.audioinput.getMicrophonePermission(function(hasPermission, message) {
+              if (hasPermission) {
+                console.log("User granted us permission to record.");
+                this.beginAudio(false)
+              } else {
+                console.warn("User denied permission to record.");
+              }
+            });
+          }
+        });
+      } else {
+        navigator
+        .mediaDevices
+        .getUserMedia({ audio: true, video: false })
+        .then(this.beginAudio)
+      }
 
     },
     beginAudio (stream) {
-      let source = this.audioCtx.createMediaStreamSource(stream)
+      if (stream !== false) {
+        let source = this.audioCtx.createMediaStreamSource(stream)
+      } else {
+        audioinput.start({streamToWebAudio: true})
+        let source = audioinput
+        // audioinput.connect(audioinput.getAudioContext().destination);
+      }
+
       let splitter = this.audioCtx.createChannelSplitter(2)
       source.connect(splitter)
       let merger = this.audioCtx.createChannelMerger(2)
       splitter.connect(merger)
 
+      merger.connect(this.waveNode)
+
       let analyzer = this.audioCtx.createAnalyser()
-      merger.connect(analyzer)
-
-      this.chunks = []
-      this.mediaRecorder = new MediaRecorder(stream)
-      this.mediaRecorder.ondataavailable = evt => {
-        this.chunks.push(evt.data)
-      }
-      this.mediaRecorder.onstop = (evt) => {
-        let chunks = this.chunks
-        console.log('stopped!');
-        // Make blob out of our blobs, and open it.
-        var blob = new Blob(this.chunks, { 'type' : 'audio/mp3; codecs=mp3' });
-        let encodedUri = URL.createObjectURL(blob);
-        this.$refs['audio'].src = encodedUri
-        var link = document.createElement('a');
-        link.setAttribute('href', encodedUri);
-        link.setAttribute('download', this.filename + '.mp3');
-        document.body.appendChild(link); // Required for FF
-        link.click(); // This will download the data file named "my_data.csv".
-
-        this.chunks = []
-        this.filename = this.filenameStr
-        this.startRecording()
-     };
-     this.mediaRecorder.start()
+      this.audioAnalyzer = analyzer
       analyzer.fftSize = this.fftn;
       analyzer.smoothingTimeConstant = .3
-      source.connect(analyzer)
-      this.audioAnalyzer = analyzer
+      this.waveNode.connect(analyzer)
+
+      // analyzer.connect(this.audioCtx.destination)
+
       this.getData()
     },
     getData () {
@@ -120,12 +146,9 @@ export default {
       this.$refs['spectro'].draw(dataArray)
       window.requestAnimationFrame(this.getData)
     },
-    saveFile (ev) {
-      console.log('ev', ev);
-      console.log('saving file');
+    saveFile () {
       this.saveDialog = false
-      this.mediaRecorder.stop()
-      this.state = 'standby'
+      this.waveNode.port.postMessage('go')
     }
   }
 }
