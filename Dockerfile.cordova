@@ -11,6 +11,16 @@ RUN cd /tmp && \
   cp -a android-sdk-licenses/*-license /usr/lib/android-sdk/licenses && \
   rm -rf android-sdk-licenses
 
+RUN mkdir -p /cordova
+WORKDIR /cordova
+RUN cordova create andrec com.kevapps.andrec andrec
+
+WORKDIR /cordova/andrec
+RUN cordova telemetry off
+RUN cordova platform add android@8.0.0
+RUN cordova plugin add cordova-plugin-audioinput
+RUN cordova build; exit 0
+
 RUN mkdir -p /app
 WORKDIR /app
 
@@ -23,17 +33,23 @@ COPY app/vue.config.js .
 COPY app/public public
 COPY app/src src
 
+COPY app/cordova_index.html public/index.html
+
 RUN npm run build
 
-RUN mkdir -p /cordova
-WORKDIR /cordova
-RUN cordova create andrec-kevapps com.kevapps.andrec andrec
-RUN rm -rf /cordova/andrec-kevapps/www
-RUN mv /app/dist /cordova/andrec-kevapps/www
+RUN rm -rf /cordova/andrec
+RUN mkdir -p /cordova/andrec
 
-WORKDIR /cordova/andrec-kevapps
+WORKDIR /cordova
+RUN cordova create andrec com.kevapps.andrec andrec
+
+WORKDIR /cordova/andrec
 RUN cordova telemetry off
 RUN cordova platform add android@8.0.0
 RUN cordova plugin add cordova-plugin-audioinput
+
+RUN rm -rf /cordova/andrec/www
+RUN mv /app/dist /cordova/andrec/www
+# RUN mv /cordova/andrec/www/wave-processor.js /cordova/andrec/www/js/wave-processor.js
 
 COPY res res

@@ -6,6 +6,7 @@
 const sampleRate = 44100
 const maxSeconds = 300
 const bufferSize = sampleRate * maxSeconds
+var ii = 0
 
 class WaveProcessor extends AudioWorkletProcessor {
     constructor() {
@@ -14,6 +15,7 @@ class WaveProcessor extends AudioWorkletProcessor {
         console.log('GOING!!!!');
         this.port.onmessage = (event) => {
             if (event.data === 'go') {
+                // // console.log('', );
                 this.go()
             }
         }
@@ -26,6 +28,10 @@ class WaveProcessor extends AudioWorkletProcessor {
             this.dataIdx++
             this.dataBuffer[this.dataIdx] = data
         })
+        ii++
+        if (ii % 1000 === 0) {
+            console.log('inputs', inputs);
+        }
         outputs[0][0].set(input)
         // console.log('inputs', inputs);
         // console.log('outputs', outputs);

@@ -16,6 +16,7 @@
     <icon src="res/mipmap-xxxhdpi/ic_launcher.png" density="xxxhdpi" />
 
     <plugin name="cordova-plugin-whitelist" spec="1" />
+    <plugin name="cordova-plugin-audioinput" spec="^1.0.1" />
     <access origin="*" />
     <allow-intent href="http://*/*" />
     <allow-intent href="https://*/*" />

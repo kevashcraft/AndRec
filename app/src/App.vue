@@ -35,6 +35,8 @@ class WaveProcessorNode extends AudioWorkletNode {
 import Spectrogram from './components/Spectrogram.vue'
 import moment from 'moment'
 
+import waveProcRaw from '!raw-loader!./assets/wave-processor.js'
+
 export default {
   name: 'app',
   components: {
@@ -47,56 +49,61 @@ export default {
       state: 'standby',
       saveDialog: false,
       audioCtx: false,
+      isCordova: !document.URL.startsWith('http'),
       filename: '',
       fftn: 512,
       sheight: 256,
       fftSize: 600 * 256
     }
   },
+  async mounted () {
+    this.audioCtx = new AudioContext({sampleRate: 44100})
+      try {
+        const worklet = URL.createObjectURL(new Blob([waveProcRaw], {type: 'text/javascript'}))
+
+        await this.audioCtx.audioWorklet.addModule(worklet)
+        console.log('WWWWNWLL!!!');
+        this.waveNode = new WaveProcessorNode(this.audioCtx);
+        console.log('this.waveNode', this.waveNode);
+        this.waveNode.port.onmessage = evt => {
+          let waveData = evt.data.waveData || []
+          var blob = new Blob([waveData], {type: 'audio/wav'});
+          var objectUrl = URL.createObjectURL(blob);
+
+          var link = document.createElement('a');
+          link.setAttribute('href', objectUrl);
+          link.setAttribute('download', this.filename + '.wav');
+          document.body.appendChild(link);
+          link.click();
+        }
+      } catch (e) {
+        console.log('e', e);
+          console.trace();
+      }
+    },
   watch: {
     saveDialog (b) {
-      this.filename = moment().format('dd (MM/DD) HH:mm')
-      setTimeout(() => {
-        if (b) {
+      if (b) {
+        this.filename = moment().format('dd (MM/DD) HH:mm')
+        setTimeout(() => {
           let input =  this.$refs['filename'].$el
           input.focus()
           input.select()
-        }
-      }, 150)
-    }
-  },
-  async mounted () {
-    this.audioCtx = new AudioContext({sampleRate: 44100})
-    await this.audioCtx.audioWorklet.addModule('wave-processor.js')
-    this.waveNode = new WaveProcessorNode(this.audioCtx);
-    this.waveNode.port.onmessage = evt => {
-      let waveData = evt.data.waveData || []
-      var blob = new Blob([waveData], {type: 'audio/wav'});
-      var objectUrl = URL.createObjectURL(blob);
-
-      var link = document.createElement('a');
-      link.setAttribute('href', objectUrl);
-      link.setAttribute('download', this.filename + '.wav');
-      document.body.appendChild(link);
-      link.click();
+        }, 150)
+      }
     }
   },
   methods: {
     async startRecording () {
-      if (this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume()
-      }
-      this.state = 'recording'
-
       if (!!window.cordova) {
         console.log('cordova!!');
         // First check whether we already have permission to access the microphone.
-        window.audioinput.checkMicrophonePermission(function(hasPermission) {
+        window.audioinput.checkMicrophonePermission(hasPermission => {
           if (hasPermission) {
             this.beginAudio(false)
           } else {
             // Ask the user for permission to access the microphone
-            window.audioinput.getMicrophonePermission(function(hasPermission, message) {
+            window.audioinput.getMicrophonePermission((hasPermission, message) => {
               if (hasPermission) {
                 console.log("User granted us permission to record.");
                 this.beginAudio(false)
@@ -107,34 +114,80 @@ export default {
           }
         });
       } else {
+
         navigator
-        .mediaDevices
-        .getUserMedia({ audio: true, video: false })
-        .then(this.beginAudio)
+          .mediaDevices
+          .getUserMedia({ audio: true, video: false })
+          .then(this.beginAudio)
       }
 
     },
-    beginAudio (stream) {
-      if (stream !== false) {
-        let source = this.audioCtx.createMediaStreamSource(stream)
+    async beginAudio (stream) {
+      console.log('this.audioCtx.state', this.audioCtx.state);
+      if (this.audioCtx.state !== 'running') {
+        await this.audioCtx.resume()
+      }
+      console.log('this.audioCtx.state', this.audioCtx.state);
+      let source
+
+      if (stream) {
+        source = this.audioCtx.createMediaStreamSource(stream)
       } else {
-        audioinput.start({streamToWebAudio: true})
-        let source = audioinput
-        // audioinput.connect(audioinput.getAudioContext().destination);
+        let captureCfg = {
+          streamToWebAudio: true,
+          audioContext: this.audioCtx,
+          normalize: false,
+          // sampleRate: 44100,
+          // channels: 1,
+          // audioSourceType: 1,
+          debug: true
+        }
+
+        audioinput.start(captureCfg)
+        source = audioinput
       }
 
+      this.state = 'recording'
+
       let splitter = this.audioCtx.createChannelSplitter(2)
-      source.connect(splitter)
       let merger = this.audioCtx.createChannelMerger(2)
-      splitter.connect(merger)
 
-      merger.connect(this.waveNode)
-
+      // console.log('source', source);
+      // console.log('sourceGA', source.getAudioContext());
       let analyzer = this.audioCtx.createAnalyser()
       this.audioAnalyzer = analyzer
-      analyzer.fftSize = this.fftn;
-      analyzer.smoothingTimeConstant = .3
+      analyzer.fftSize = 256;
+      analyzer.smoothingTimeConstant = 0
+      // console.log('this.audioAnalyzer', this.audioAnalyzer);
+
+      // source.connect(this.waveNode)
+      source.connect(splitter)
+      splitter.connect(merger)
+      // source.connect(analyzer)
+      merger.connect(this.waveNode)
       this.waveNode.connect(analyzer)
+      // this.waveNode.connect(this.audioCtx.destination)
+      analyzer.connect(this.audioCtx.destination)
+
+	// var processorNode = this.audioCtx.createScriptProcessor(2048, 1, 1);
+	// analyzer.connect( this.audioCtx.createMediaStreamDestination() );
+  // processorNode.connect(this.audioCtx.destination);
+  // setInterval(() => {
+  //     var dataArray = new Uint8Array(256)
+  //     analyzer.getByteFrequencyData(dataArray);
+  //     console.log('dataArray', dataArray);
+  //     // console.log('dataArray', dataArray);
+  //     // this.$refs['spectro'].draw(dataArray)
+  //     // window.requestAnimationFrame(this.getData)
+  // }, 1000)
+
+
+// if (!!this.waveNode) {
+      //   merger.connect(this.waveNode)
+      //   this.waveNode.connect(analyzer)
+      // } else {
+      //   merger.connect(analyzer)
+      // }
 
       // analyzer.connect(this.audioCtx.destination)
 
@@ -143,6 +196,7 @@ export default {
     getData () {
       var dataArray = new Uint8Array(this.sheight)
       this.audioAnalyzer.getByteFrequencyData(dataArray);
+      // console.log('dataArray', dataArray);
       this.$refs['spectro'].draw(dataArray)
       window.requestAnimationFrame(this.getData)
     },
@@ -152,6 +206,27 @@ export default {
     }
   }
 }
+
+
+function onAudioInput( evt ) {
+    // 'evt.data' is an integer array containing raw audio data
+    //
+    console.log( "Audio data received: " + evt.data.length + " samples", evt );
+
+    // ... do something with the evt.data array ...
+}
+
+// Listen to audioinput events
+window.addEventListener( "audioinput", onAudioInput, false );
+
+var onAudioInputError = function( error ) {
+    alert( "onAudioInputError event recieved: " + JSON.stringify(error) );
+};
+
+// Listen to audioinputerror events
+window.addEventListener( "audioinputerror", onAudioInputError, false );
+
+
 </script>
 
 <style lang="scss">

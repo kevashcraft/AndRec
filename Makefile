@@ -23,16 +23,26 @@ cordova_bash:
             -it \
             -v $(shell pwd)/dist:/dist \
             -v $(shell pwd)/secret:/secret \
-            -v $(shell pwd)/config.xml:/cordova/andrec-kevapps/config.xml \
-            -e "keystore_pass=$(keystore_pass)" \
+            -v $(shell pwd)/config.xml:/cordova/andrec/config.xml \
 			andrec_cordova bash
+
+cordova_debug: cordova_build
+	docker run \
+            -it \
+            -v $(shell pwd)/dist:/dist \
+            -v $(shell pwd)/secret:/secret \
+            -v $(shell pwd)/config.xml:/cordova/andrec/config.xml \
+			andrec_cordova bash -c "cordova build android \
+			--debug && \
+			cp /cordova/andrec/platforms/android/app/build/outputs/apk/debug/app-debug.apk /dist/app-debug.apk"
+
 
 cordova: cordova_build
 	docker run \
             -it \
             -v $(shell pwd)/dist:/dist \
             -v $(shell pwd)/secret:/secret \
-            -v $(shell pwd)/config.xml:/cordova/andrec-kevapps/config.xml \
+            -v $(shell pwd)/config.xml:/cordova/andrec/config.xml \
 			andrec_cordova bash -c "cordova build android \
 			--release \
 			-- \
@@ -40,7 +50,7 @@ cordova: cordova_build
 			--alias kevapps_one \
 			--storePassword=$(keystore_pass) \
 			--password=$(keystore_pass) && \
-			cp /cordova/andrec-kevapps/platforms/android/app/build/outputs/apk/release/app-release.apk /dist/app-release.apk"
+			cp /cordova/andrec/platforms/android/app/build/outputs/apk/release/app-release.apk /dist/app-release.apk"
 
 prod_build:
 	docker build -f Dockerfile.prod -t kevashcraft/andrec-kevapps:latest .
